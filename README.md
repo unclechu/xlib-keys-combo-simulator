@@ -20,6 +20,7 @@ $ ./build/simulate-keys --press LShift
 $ ./build/simulate-keys --release LShift
 $ ./build/simulate-keys CapsLock NumLock --press LShift
 $ ./build/simulate-keys --press LShift --release RShift
+$ ./build/simulate-keys --toggle Level3Shift
 ```
 
 List of possible keys to use
@@ -33,7 +34,7 @@ at that time.
 * RShift
 * NumLock
 * CapsLock
-* Level3
+* Level3Shift
 
 Author
 ------

@@ -12,6 +12,7 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
+#include <X11/XKBlib.h>
 
 #define streq(a, b) (strcmp(a, b) == 0)
 
@@ -26,7 +27,7 @@ enum Mode
 	ModePressRelease = 1,
 	ModePress,
 	ModeRelease,
-	ModeToggle // TODO implement
+	ModeToggle
 };
 
 typedef unsigned int ModeEnum;
@@ -42,11 +43,11 @@ const KeyAlias aliases[] = {
 	{ "RShift", XK_ISO_Next_Group },
 	{ "NumLock", XK_Num_Lock },
 	{ "CapsLock", XK_Caps_Lock },
-	{ "Level3", XK_ISO_Level3_Shift },
+	{ "Level3Shift", XK_ISO_Level3_Shift },
 };
 const unsigned int aliases_count = sizeof aliases / sizeof *aliases;
 
-bool is_opt(const char *arg)
+const bool is_opt(const char *arg)
 {
 	if (strlen(arg) < 2) {
 		return false;
@@ -57,7 +58,67 @@ bool is_opt(const char *arg)
 	return streq(first_chars, "--") ? true : false;
 }
 
-unsigned int main(const unsigned int argc, const char **argv)
+const KeySym get_keysym_by_name(const char *name)
+{
+	for (unsigned int alias_i = 0; alias_i < aliases_count; ++alias_i) {
+		const KeyAlias *alias = &aliases[alias_i];
+		if (streq(alias->name, name)) {
+			return alias->sym;
+		}
+	}
+	return -1; // alias not found
+}
+
+bool is_pressed_keys_fetched = false;
+char keys_return[32];
+const unsigned int keys_return_count = sizeof keys_return / sizeof *keys_return;
+
+void fetch_pressed_keys(Display *dpy)
+{
+	if (is_pressed_keys_fetched == false) {
+		XQueryKeymap(dpy, keys_return);
+		is_pressed_keys_fetched = true;
+	}
+}
+
+const bool is_key_pressed(Display *dpy, const char *name)
+{
+	const KeySym keysym = get_keysym_by_name(name);
+	assert(keysym != -1);
+	fetch_pressed_keys(dpy);
+	
+	for (unsigned int i = 0; i < keys_return_count; ++i) {
+		
+		if (keys_return[i] == '\0') {
+			continue;
+		}
+		
+		for (
+			int pos = 0, num = keys_return[i];
+			pos < 8;
+			++pos, num /= 2
+		) {
+			if ((num & 0x01) != 1) {
+				continue;
+			}
+			
+			// see also http://stackoverflow.com/questions/9838385/replace-of-xkeycodetokeysym#22418839
+			const unsigned int mask = (
+				streq(name, "LShift") || streq(name, "RShift") ? ShiftMask : 0
+			);
+			const KeySym pressedKeysym =
+				XkbKeycodeToKeysym(dpy, (i*8 + pos), 0, mask);
+			
+			if (pressedKeysym == keysym) {
+				return true;
+			}
+		}
+	}
+	
+	return false;
+}
+
+const unsigned int main(const unsigned int argc, const char **argv)
 {
 	assert(argc >= 1);
 	Display *dpy = XOpenDisplay(NULL);
@@ -78,6 +139,8 @@ unsigned int main(const unsigned int argc, const char **argv)
 				cur_mode = ModePress;
 			} else if (streq(arg, "--release")) {
 				cur_mode = ModeRelease;
+			} else if (streq(arg, "--toggle")) {
+				cur_mode = ModeToggle;
 			} else {
 				fprintf(stderr, "Unknown option: %s\n", arg);
 				return EXIT_FAILURE;
@@ -85,28 +148,24 @@ unsigned int main(const unsigned int argc, const char **argv)
 			continue;
 		}
 		
-		bool is_alias_found = false;
-		for (unsigned int alias_i = 0; alias_i < aliases_count; ++alias_i) {
-			const KeyAlias alias = aliases[alias_i];
-			if (streq(arg, alias.name)) {
-				
-				KeyAction action = {
-					cur_mode,
-					XKeysymToKeycode(dpy, alias.sym)
-				};
-				KeyAction *action_pointer = malloc(sizeof *action_pointer);
-				memcpy(action_pointer, &action, sizeof action);
-				
-				key_actions[key_actions_count++] = action_pointer;
-				is_alias_found = true;
-				break;
-			}
-		}
-		
-		if (is_alias_found == false) {
-			fprintf(stderr, "Unknown key: %s\n", arg);
+		const KeySym keysym = get_keysym_by_name(arg);
+		if (keysym == -1) {
+			fprintf(stderr, "Unknown key name '%s'\n", arg);
 			return EXIT_FAILURE;
 		}
+		
+		ModeEnum action_mode = cur_mode;
+		if (cur_mode == ModeToggle) {
+			action_mode = is_key_pressed(dpy, arg) ? ModeRelease : ModePress;
+		}
+		KeyAction action = {
+			action_mode,
+			XKeysymToKeycode(dpy, keysym)
+		};
+		KeyAction *action_pointer = malloc(sizeof *action_pointer);
+		memcpy(action_pointer, &action, sizeof action);
+		
+		key_actions[key_actions_count++] = action_pointer;
 	}
 	
 	// press
