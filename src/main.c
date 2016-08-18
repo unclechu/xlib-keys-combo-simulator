@@ -124,7 +124,7 @@ const unsigned int main(const unsigned int argc, const char **argv)
 	Display *dpy = XOpenDisplay(NULL);
 	
 	unsigned int key_actions_count = 0;
-	KeyAction **key_actions = malloc(sizeof **key_actions * (argc - 1));
+	KeyAction key_actions[argc - 1];
 	ModeEnum cur_mode = ModePressRelease;
 	
 	// parse arguments
@@ -162,15 +162,12 @@ const unsigned int main(const unsigned int argc, const char **argv)
 			action_mode,
 			XKeysymToKeycode(dpy, keysym)
 		};
-		KeyAction *action_pointer = malloc(sizeof *action_pointer);
-		memcpy(action_pointer, &action, sizeof action);
-		
-		key_actions[key_actions_count++] = action_pointer;
+		memcpy(&key_actions[key_actions_count++], &action, sizeof action);
 	}
 	
 	// press
 	for (unsigned int key_i = 0; key_i < key_actions_count; ++key_i) {
-		const KeyAction *action = key_actions[key_i];
+		const KeyAction *action = &key_actions[key_i];
 		if (action->mode == ModePressRelease || action->mode == ModePress) {
 			XTestFakeKeyEvent(dpy, action->keycode, True, CurrentTime);
 			XFlush(dpy);
@@ -178,7 +175,7 @@ const unsigned int main(const unsigned int argc, const char **argv)
 	}
 	// release
 	for (unsigned int key_i = 0; key_i < key_actions_count; ++key_i) {
-		const KeyAction *action = key_actions[key_i];
+		const KeyAction *action = &key_actions[key_i];
 		if (action->mode == ModePressRelease || action->mode == ModeRelease) {
 			XTestFakeKeyEvent(dpy, action->keycode, False, CurrentTime);
 			XFlush(dpy);
