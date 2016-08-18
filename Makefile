@@ -1,4 +1,4 @@
-NAME ?= xlib-keys-combo-simulator
+NAME ?= simulate-keys
 BUILD_DIR ?= ./build/
 
 $(NAME): clean
